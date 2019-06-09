@@ -44,8 +44,8 @@ The code will use default parameter value (q) used in the code.
 
 Convert to Python `dict` by `user_id, lexeme_id` and pruning it for reading it:
 
-    python dataset2dict.py ./data/raw/duolingo.csv ./data/duo_dict.dill --success_prob 0.99 --max_days 30 
-    python process_raw_data.py ./data/raw/duolingo.csv ./data/duolingo_reduced.csv
+    python3 dataset2dict.py ./data/raw/duolingo.csv ./data/duo_dict.dill --success_prob 0.99 --max_days 30 
+    python3 process_raw_data.py ./data/raw/duolingo.csv ./data/duolingo_reduced.csv
 
 ## Plots
 

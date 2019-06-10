@@ -3,7 +3,9 @@ import matplotlib.pyplot as plt
 import matplotlib
 
 SPINE_COLOR = 'grey'
-def latexify(fig_width=None, fig_height=None, columns=1, largeFonts=False,font_scale=1):
+
+
+def latexify(fig_width=None, fig_height=None, columns=1, largeFonts=False, font_scale=1):
     """Set up matplotlib's RC params for LaTeX plotting.
     Call this before plotting a figure.
 

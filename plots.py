@@ -18,7 +18,7 @@ from plot_utils import *
 # get_unique_user_lexeme, get_training_pairs, calc_user_LL_dict, \
 #    calc_LL_dict_threshold, merge_with_thres_LL, get_all_durations,
 
-
+from tqdm import tqdm
 from backup.backup import save, load
 
 FIG_FOLDER = "fig"
@@ -28,12 +28,6 @@ os.makedirs(FIG_FOLDER, exist_ok=True)
 RAW_DATA = "./data/duolingo_reduced.csv"
 DICT_DATA = "./data/duo_dict.dill"
 MODEL_WEIGHTS_FILE = "power.duolingo.weights"
-
-FILE_RESULTS_DUO = os.path.join("data", "results_duo.p")
-FILE_DUO_PAIRS = os.path.join("data", "duo_pairs.p")
-FILE_DF_DUO = os.path.join("data", "df_duo.p")
-FILE_TRAINING_PAIRS = os.path.join("data", "training_pairs.p")
-FILE_DUO_DICT = os.path.join("data", "duo_dict.p")
 
 sns.set_style("ticks")
 sns.set_context("paper", font_scale=2.5, rc={'lines.linewidth': 3,
@@ -51,77 +45,101 @@ class AnalysisObjects:
         self._initial_cond = None
         self._df_duo = None
         self._df_duo_index_set = None
+        self._results_duo = None
+        self._duo_lexeme_difficulty = None
+        self._forgetting_rate = None
+        self._top_k_99_reps = None
+        self._stats = None
+        self._duo_stats_99 = None
+        self._duo_stats_training = None
+        self._middle_dur_pairs = None
+        self._duo_durations = None
+
+    @property
+    def middle_dur_pairs(self):
+
+        if self._middle_dur_pairs is None:
+
+            self._middle_dur_pairs = self.load_if_not_existing(
+                file_name='middle_dur_pairs',
+                method=self.create_middle_dur_pairs
+            )
+        return self._middle_dur_pairs
+
+    @property
+    def duo_stats_training(self):
+        if self._duo_stats_training is None:
+            self._duo_stats_training = self.load_if_not_existing(
+                file_name='duo_stats_training.p',
+                method=self.create_duo_stats_training
+            )
+
+        return self._duo_stats_training
 
     @property
     def duo_pairs(self):
 
         if self._duo_pairs is None:
             self._duo_pairs = \
-                self.load_if_not_existing(file_path=FILE_DUO_PAIRS,
+                self.load_if_not_existing(file_name='duo_pairs.p',
                                           method=get_unique_user_lexeme,
-                                          duo_dict=self.duo_dict)
+                                          data_dict=self.duo_dict)
         return self._duo_pairs
 
-    def totals(self, ):
+    def totals(self):
 
         total_correct = []
         total_seen = []
         for ind, (u_id, l_id) in enumerate(self.duo_pairs):
-            for item in self.duo_dict[u_id][l_id]:
-                time = self.initial_cond[(l_id, u_id)]
-                correct = self.df_duo_index_set["history_correct"].loc[(l_id, u_id, time)].tolist()[0]
-                seen = self.df_duo_index_set["history_seen"].loc[(l_id, u_id, time)].tolist()[0]
+
+            time = self.initial_cond[(l_id, u_id)]
+            correct = self.df_duo_index_set["history_correct"].loc[
+                (l_id, u_id, time)].tolist()[0]
+            seen = self.df_duo_index_set["history_seen"].loc[
+                (l_id, u_id, time)].tolist()[0]
+
+            for _ in self.duo_dict[u_id][l_id]:  # Suspicious loop
+
                 total_correct.append(correct)
                 total_seen.append(seen)
 
+    @property
+    def duo_durations(self):
 
-    # def right_wrong(self):
-    #
-    #     results_duo, duo_pairs, initial_cond, duo_dict, df_duo_index_set, duo_lexeme_difficulty,
-    #     duo_map_lexeme
-    #
-    #     right = results_duo.loc['right'][0]
-    #     wrong = results_duo.loc['wrong'][0]
-    #     temp_duo_map_lexeme = {}
-    #     for ind, (u_id, l_id) in enumerate(duo_pairs):
-    #         if ind % 1000 == 0:
-    #             print(datetime.datetime.now().isoformat(), ind, '/', len(duo_pairs))
-    #         for item in duo_dict[u_id][l_id]:
-    #             time = initial_cond[(l_id, u_id)]
-    #             correct = df_duo_index_set["history_correct"].loc[(l_id, u_id, time)].tolist()[0]
-    #             seen = df_duo_index_set["history_seen"].loc[(l_id, u_id, time)].tolist()[0]
-    #             # print(correct, seen)
-    #             temp = None
-    #             if l_id not in temp_duo_map_lexeme:
-    #                 temp_duo_map_lexeme[l_id] = duo_lexeme_difficulty[duo_map_lexeme[l_id]]
-    #             temp = temp_duo_map_lexeme[l_id]
-    #             item['n_0'] = temp * 2 ** (-(right * correct + wrong * (seen - correct)))
+        if self._duo_durations is None:
+            self._duo_durations = self.load_if_not_existing(
+                file_name='duo_durations.p',
+                method=self.create_duo_durations
+            )
 
-
+        return self._duo_durations
 
     @property
     def training_pairs(self):
 
         if self._training_pairs is None:
-            self._training_pairs = self.load_if_not_existing(file_path=FILE_TRAINING_PAIRS, method=get_training_pairs,
-                                                             data_dict=self.duo_dict, duo_pairs=self.duo_pairs)
+            self._training_pairs = self.load_if_not_existing(
+                file_name='training_pairs.p', method=get_training_pairs,
+                data_dict=self.duo_dict, pairs=self.duo_pairs)
 
-        print(f'{len(self._training_pairs) / len(self.duo_pairs) * 100.:.2f} of sequences can be used for training/testing.')
+        print(f'{len(self._training_pairs) / len(self.duo_pairs) * 100.:.2f}'
+              f' of sequences can be used for training/testing.')
         return self._training_pairs
 
     @property
     def initial_cond(self):
 
         if self._initial_cond is None:
-            self._initial_cond = self.load_if_not_existing(file_path=)
+            self._initial_cond = self.load_if_not_existing(
+                file_name="initial_cond.p",
+                method=self.create_initial_cond)
+        return self._initial_cond
 
     @property
     def duo_dict(self):
 
         if self._duo_dict is None:
-            self._duo_dict = self.load_if_not_existing(
-                file_path=FILE_DUO_DICT,
-                method=self.load_duo_dict)
+            self._duo_dict = self.load_duo_dict()
 
         return self._duo_dict
 
@@ -141,13 +159,78 @@ class AnalysisObjects:
 
         if self._df_duo_index_set is None:
             self._df_duo_index_set = self.load_if_not_existing(
-                file_name=""
+                file_name="df_duo_index_set.p",
+                method=self.create_df_duo_index_set
             )
+        return self._df_duo_index_set
+
+    @property
+    def results_duo(self):
+
+        if self._results_duo is None:
+            self._results_duo = self.load_if_not_existing(
+                file_name="results_duo.p",
+                method=self.load_results_duo)
+
+        return self._results_duo
+
+    @property
+    def forgetting_rate(self):
+
+        if self._forgetting_rate is None:
+            self._forgetting_rate = self.load_if_not_existing(
+                file_name='forgetting_rate.p',
+                method=self.create_forgetting_rate
+            )
+        return self._forgetting_rate
+
+    @property
+    def duo_lexeme_difficulty(self):
+
+        if self._duo_lexeme_difficulty is None:
+
+            self._duo_lexeme_difficulty = self.load_if_not_existing(
+                file_name='duo_lexeme_difficulty.p',
+                method=self.create_duo_lexeme_difficulty
+            )
+
+        return self._duo_lexeme_difficulty
+
+    @property
+    def top_k_99_reps(self):
+        if self._top_k_99_reps is None:
+            self._top_k_99_reps = self.load_if_not_existing(
+                file_name="top_k_99_reps.p",
+                method=self.create_top_k_99_reps
+            )
+        return self._top_k_99_reps
+
+    @property
+    def duo_stats_99(self):
+
+        if self._duo_stats_99 is None:
+            self._duo_stats_99 = self.load_if_not_existing(
+                file_name='duo_stats_99.p',
+                method=self.create_duo_stats_99
+            )
+        return self._duo_stats_99
+
+    @property
+    def stats(self):
+
+        if self._stats is None:
+            self._stats = self.load_if_not_existing(
+                file_name='stats.p',
+                method=self.create_stats
+            )
+        return self._stats
 
     @staticmethod
     def load_if_not_existing(file_name, method, **kwargs):
 
-        file_path = os.path.join("data", file_name)
+        folder = os.path.join("data", "pickle")
+        os.makedirs(folder, exist_ok=True)
+        file_path = os.path.join(folder, file_name)
 
         if os.path.exists(file_path):
             data = load(file_path)
@@ -179,20 +262,76 @@ class AnalysisObjects:
         df_duo = pd.read_csv(RAW_DATA)
         print("Done!")
 
-        df_duo['lexeme_comp'] = df_duo['learning_language'] + ":" + df_duo['lexeme_string']
-
-        # df_duo.set_index(["lexeme_id", "user_id", "timestamp"], inplace=True)
-        # df_duo.sort_index(inplace=True)
+        df_duo['lexeme_comp'] = df_duo['learning_language'] + ":" \
+            + df_duo['lexeme_string']
 
         return df_duo
 
+    def load_duo_dict(self, start=5):
+
+        folder = os.path.join("data", "dill")
+        os.makedirs(folder, exist_ok=True)
+        file_path = os.path.join(folder, "duo_dict_preprocessed.dill")
+
+        if not os.path.exists(file_path):
+
+            print('Loading duo dictionary...', end=" ", flush=True)
+            with open(DICT_DATA, 'rb') as f:
+                self._duo_dict = dill.load(f)
+            print('Done!')
+
+            print("Preprocess the data...", end=' ', flush=True)
+            #convert = self.df_duo[['lexeme_comp', 'lexeme_id']].set_index(
+             #   'lexeme_comp').to_dict()['lexeme_id']
+
+            # duo_lexeme_difficulty = 2 ** (
+            #     -(self.results_duo[start:] + self.results_duo.loc['bias']))
+            # new_index = []
+            # for ind in duo_lexeme_difficulty.index:
+            #     new_index.append(convert[ind])
+            #
+            # duo_lexeme_difficulty['new_index'] = new_index
+            # duo_lexeme_difficulty.set_index('new_index', inplace=True)
+            #
+            duo_map_lexeme = dict([(l_id, ind) for ind, l_id in
+                                    enumerate(self.duo_lexeme_difficulty.index)])
+
+            duo_lexeme_difficulty = self.duo_lexeme_difficulty['value'].tolist()
+            # # duo_alpha = (-2 ** (-self.results_duo.loc['right']) + 1).iloc[0]
+            # # duo_beta = (2 ** (-self.results_duo.loc['wrong']) - 1).iloc[0]
+
+            right = self.results_duo.loc['right'][0]
+            wrong = self.results_duo.loc['wrong'][0]
+            temp_duo_map_lexeme = {}
+            for ind, (u_id, l_id) in tqdm(enumerate(self.duo_pairs), total=len(self.duo_pairs)):
+                # if ind % 1000 == 0:
+                #     print(datetime.datetime.now().isoformat(), ind, '/', len(self.duo_pairs))
+                for item in self._duo_dict[u_id][l_id]:
+                    time = self.initial_cond[(l_id, u_id)]
+                    correct = self.df_duo_index_set["history_correct"].loc[(l_id, u_id, time)].tolist()[0]
+                    seen = self.df_duo_index_set["history_seen"].loc[(l_id, u_id, time)].tolist()[0]
+                    # print(correct, seen)
+                    # temp = None
+                    if l_id not in temp_duo_map_lexeme:
+                        temp_duo_map_lexeme[l_id] = duo_lexeme_difficulty[duo_map_lexeme[l_id]]
+
+                    temp = temp_duo_map_lexeme[l_id]
+                    item['n_0'] = temp * 2 ** (-(right * correct + wrong * (seen - correct)))
+            print('Done!')
+
+            print('Dumping...', end=' ')
+            dill.dump(self._duo_dict, open(file_path, 'wb'))
+            print('Done!')
+        else:
+            dill.load(open(file_path, 'rb'))
+
     def create_initial_cond(self):
 
-        initial_cond = self.df_duo[["lexeme_id", "user_id", "timestamp"]].groupby(["lexeme_id", "user_id"]).min()[
+        initial_cond = self.df_duo[["lexeme_id", "user_id", "timestamp"]] \
+            .groupby(["lexeme_id", "user_id"]).min()[
             "timestamp"]
         initial_cond = initial_cond.to_dict()
         return initial_cond
-
 
     def create_df_duo_index_set(self):
         df_duo_index_set = self.df_duo.copy().set_index(
@@ -200,8 +339,158 @@ class AnalysisObjects:
         df_duo_index_set.sort_index(inplace=True)
         return df_duo_index_set
 
+    def create_duo_lexeme_difficulty(self, start=5):
+
+        convert = self.df_duo[['lexeme_comp', 'lexeme_id']].set_index(
+            'lexeme_comp').to_dict()['lexeme_id']
+
+        duo_lexeme_difficulty = 2 ** (
+            -(self.results_duo[start:] + self.results_duo.loc['bias']))
+        new_index = []
+        for ind in duo_lexeme_difficulty.index:
+            new_index.append(convert[ind])
+
+        duo_lexeme_difficulty['new_index'] = new_index
+        duo_lexeme_difficulty.set_index('new_index', inplace=True)
+        return duo_lexeme_difficulty
+
+    def first_plot(self):
+
+        latexify(fig_width=3.4, largeFonts=True)
+
+        plot_perf_by_reps_boxed(self.top_k_99_reps, with_threshold=True, std=False,
+                                max_rev=7, median=True, stats=self.stats)
+
+        format_axes(plt.gca())
+        plt.ylabel("$\hat{n}$")
+        plt.xlabel("\# reviews")
+
+        plt.ylim(0, 0.4)
+        plt.savefig('fig/empirical_p_recall_duo.pdf', bbox_inches='tight',pad_inches=0)
+        # plt.savefig(plot_path('empirical_p_recall_duo_new_boxed.pdf'), bbox_inches='tight',pad_inches=0)
+        # plt.xlim(0,6*2+)
+
+    def create_stats(self):
+
+        stats = {}
+        for i in range(len(self.top_k_99_reps)):
+            mem_thresh = mannwhitneyu(
+                self.top_k_99_reps[i][1]['perf_top_threshold'],
+                self.top_k_99_reps[i][1]['perf_top_mem'])
+            mem_unif = mannwhitneyu(
+                self.top_k_99_reps[i][1]['perf_top_mem'],
+                self.top_k_99_reps[i][1]['perf_top_unif'])
+            stats[self.top_k_99_reps[i][0]] = (mem_thresh, mem_unif)
+            print(self.top_k_99_reps[i][0], "MEM vs. Threshold",
+                  stats[self.top_k_99_reps[i][0]][0])
+            print(self.top_k_99_reps[i][0], "MEM vs. Uniform",
+                  stats[self.top_k_99_reps[i][0]][1])
+
+        return stats
+
+    def create_duo_stats_99(self):
+
+        duo_lexeme_difficulty = self.duo_lexeme_difficulty['value'].tolist()
+        duo_alpha = (-2 ** (-self.results_duo.loc['right']) + 1).iloc[0]
+        duo_beta = (2 ** (-self.results_duo.loc['wrong']) - 1).iloc[0]
+        duo_map_lexeme = dict([(l_id, ind) for ind, l_id in
+                               enumerate(self.duo_lexeme_difficulty.index)])
+
+        return calc_user_LL_dict(
+            self.duo_dict, duo_alpha, duo_beta,
+            duo_lexeme_difficulty, duo_map_lexeme,
+            success_prob=0.99, pairs=self.duo_pairs, verbose=False)
+
+    def create_duo_stats_training(self):
+
+        duo_lexeme_difficulty = self.duo_lexeme_difficulty['value'].tolist()
+        duo_alpha = (-2 ** (-self.results_duo.loc['right']) + 1).iloc[0]
+        duo_beta = (2 ** (-self.results_duo.loc['wrong']) - 1).iloc[0]
+        duo_map_lexeme = dict([(l_id, ind) for ind, l_id in
+                               enumerate(self.duo_lexeme_difficulty.index)])
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings('error')
+            duo_stats_training = calc_user_LL_dict(
+                self.duo_dict, duo_alpha, duo_beta, duo_lexeme_difficulty,
+                duo_map_lexeme,
+                success_prob=0.99, training=True, pairs=self.training_pairs,
+                verbose=False,
+                n_procs=None
+            )
+        return duo_stats_training
+
+    def create_top_k_99_reps(self, with_exact_reps=True, quantile=0.25,
+                             with_training=True):
+
+        # Calculate the metric
+        from pathos.multiprocessing import ProcessingPool as Pool
+
+        stats_dict = self.duo_stats_99 if not with_training else \
+            self.duo_stats_training
+        # pairs = duo_pairs if not with_training else training_pairs
+        pairs = self.duo_pairs if not with_training else self.middle_dur_pairs
+
+        def top_k_reps_worker(reps):
+            max_reps = None if not with_exact_reps else reps + 1
+            return reps, calc_top_k_perf(stats_dict, self.forgetting_rate,
+                                         pairs=pairs,
+                                         quantile=quantile,
+                                         min_reps=reps, max_reps=max_reps,
+                                         with_overall=True,
+                                         only_finite=False,
+                                         with_threshold=True)
+
+        reps_range = np.arange(1 if not with_training else 2, 8)
+
+        # For performance
+        with Pool() as pool:
+            top_k_99_reps = pool.map(top_k_reps_worker, reps_range)
+
+        # For debugging
+        # top_k_99_reps = []
+        # for i in reps_range:
+        #    top_k_99_reps.append(top_k_reps_worker(i))
+
+        return top_k_99_reps
+
+    def create_middle_dur_pairs(self):
+
+        # Different sequences be chosen for different T
+        # The paper contains plots correspondnig to T \in {3, 5, 7}
+        middle_dur_pairs = filter_by_duration(
+            durations_dict=self.duo_durations,
+            pairs=self.training_pairs,
+            T=3, alpha=0.1,
+            verbose=True)
+        return middle_dur_pairs
+
+    def create_duo_durations(self):
+
+        duo_durations = get_all_durations(self.duo_dict, self.duo_pairs)
+        return duo_durations
+
+    def create_base(self):
+
+        base = calc_empirical_forgetting_rate(self.duo_dict,
+                                              pairs=self.duo_pairs,
+                                              return_base=True)
+        return base
+
+    def create_forgetting_rate(self):
+
+        duo_forgetting_rate = calc_empirical_forgetting_rate(
+            self.duo_dict,
+            pairs=self.duo_pairs,
+            no_norm=False)
+        return duo_forgetting_rate
+
+
 def main():
-    pass
+
+    a = AnalysisObjects()
+    a.first_plot()
+
     # # Load Data
     # df_duo = load_if_not_existing(FILE_DF_DUO, method=load_df_duo)
     # results_duo = load_if_not_existing(FILE_RESULTS_DUO, method=load_results_duo)

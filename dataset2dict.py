@@ -30,10 +30,10 @@ def add_user_lexeme_columns(success_prob):
     """Adds 'n_correct', 'n_wrong', 'n_total' column to the data-frame."""
 
     if "history_seen" in _df_indexed.columns:
-         _df_indexed['n_correct'] = _df_indexed['history_correct']
-         _df_indexed['n_total'] = _df_indexed['history_seen']
-         _df_indexed['n_wrong']= _df_indexed['n_total']-_df_indexed['n_correct']
-         return
+        _df_indexed['n_correct'] = _df_indexed['history_correct']
+        _df_indexed['n_total'] = _df_indexed['history_seen']
+        _df_indexed['n_wrong']= _df_indexed['n_total']-_df_indexed['n_correct']
+        return
     print("No meta info on total number of exercises")
     with MP.Pool(3) as pool:
         n_correct, n_wrong, n_total = pool.map(_column_worker,

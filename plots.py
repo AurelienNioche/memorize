@@ -32,6 +32,8 @@ MODEL_WEIGHTS_FILE = "power.duolingo.weights"
 FILE_RESULTS_DUO = os.path.join("data", "results_duo.p")
 FILE_DUO_PAIRS = os.path.join("data", "duo_pairs.p")
 FILE_DF_DUO = os.path.join("data", "df_duo.p")
+FILE_TRAINING_PAIRS = os.path.join("data", "training_pairs.p")
+FILE_DUO_DICT = os.path.join("data", "duo_dict.p")
 
 sns.set_style("ticks")
 sns.set_context("paper", font_scale=2.5, rc={'lines.linewidth': 3,
@@ -40,115 +42,163 @@ sns.set_context("paper", font_scale=2.5, rc={'lines.linewidth': 3,
 sns.set_palette("Set1")
 
 
-# class AnalysisObjects:
-#
-#     def __init__(self):
-#         self._duo_pairs = None
-#         self.duo_dict = None
-#         self.initial_cond = None
-#         self.df_duo_index_set = None
-#
-#     def duo_pairs(self):
-#
-#         if self._duo_pairs is None:
-#             self._duo_pairs = self.load_if_not_existing(file_path=FILE_DUO_PAIRS, method=get_unique_user_lexeme,
-#                                                         duo_dict=self.duo_dict)
-#
-#         return self._duo_pairs
-#
-#     def totals(self, ):
-#
-#         duo_pairs, duo_dict, initial_cond, df_duo_index_set
-#
-#         total_correct = []
-#         total_seen = []
-#         for ind, (u_id, l_id) in enumerate(duo_pairs):
-#             for item in duo_dict[u_id][l_id]:
-#                 time = initial_cond[(l_id, u_id)]
-#                 correct = df_duo_index_set["history_correct"].loc[(l_id, u_id, time)].tolist()[0]
-#                 seen = df_duo_index_set["history_seen"].loc[(l_id, u_id, time)].tolist()[0]
-#                 total_correct.append(correct)
-#                 total_seen.append(seen)
-#
-#
-#     def right_wrong(self):
-#
-#         results_duo, duo_pairs, initial_cond, duo_dict, df_duo_index_set, duo_lexeme_difficulty,
-#         duo_map_lexeme
-#
-#         right = results_duo.loc['right'][0]
-#         wrong = results_duo.loc['wrong'][0]
-#         temp_duo_map_lexeme = {}
-#         for ind, (u_id, l_id) in enumerate(duo_pairs):
-#             if ind % 1000 == 0:
-#                 print(datetime.datetime.now().isoformat(), ind, '/', len(duo_pairs))
-#             for item in duo_dict[u_id][l_id]:
-#                 time = initial_cond[(l_id, u_id)]
-#                 correct = df_duo_index_set["history_correct"].loc[(l_id, u_id, time)].tolist()[0]
-#                 seen = df_duo_index_set["history_seen"].loc[(l_id, u_id, time)].tolist()[0]
-#                 # print(correct, seen)
-#                 temp = None
-#                 if l_id not in temp_duo_map_lexeme:
-#                     temp_duo_map_lexeme[l_id] = duo_lexeme_difficulty[duo_map_lexeme[l_id]]
-#                 temp = temp_duo_map_lexeme[l_id]
-#                 item['n_0'] = temp * 2 ** (-(right * correct + wrong * (seen - correct)))
-#
-#
-#
-#
-#     def get_training_pairs(self):
-#
-#         if self.duo_dict is None:
-#             self.set_duo_dict()
-#
-#         training_pairs = get_training_pairs(duo_dict, duo_pairs)
-#
-#         print(f'{len(training_pairs) / len(duo_pairs) * 100.:.2f} of sequences can be used for training/testing.')
-#
-#     def set_duo_dict(self):
-#
-#         self.duo_dict =
-#
-#     def load_if_not_existing(self, file_path, method, **kwargs):
-#
-#         if os.path.exists(file_path):
-#             data = load(file_path)
-#
-#         else:
-#             data = method(**kwargs)
-#             save(obj=data, file_name=file_path)
-#
-#         setattr(self, method.split('_'))
-#         return data
-#
-#
-# def load_results_duo():
-#
-#     print('Loading weights...', end=" ", flush=True)
-#     results_duo = pd.read_csv(open(MODEL_WEIGHTS_FILE, 'rb'),
-#                               sep="\t",
-#                               names=['label', 'value'],
-#                               header=None)
-#
-#     results_duo.set_index("label", inplace=True)
-#     print("Done!")
-#     return results_duo
-#
-#
-# def load_df_duo():
-#
-#     # Load Data
-#     print('Loading raw data...', end=" ", flush=True)
-#     df_duo = pd.read_csv(RAW_DATA)
-#     print("Done!")
-#
-#     df_duo['lexeme_comp'] = df_duo['learning_language'] + ":" + df_duo['lexeme_string']
-#
-#     # df_duo.set_index(["lexeme_id", "user_id", "timestamp"], inplace=True)
-#     # df_duo.sort_index(inplace=True)
-#
-#     return df_duo
+class AnalysisObjects:
 
+    def __init__(self):
+        self._duo_pairs = None
+        self._duo_dict = None
+        self._training_pairs = None
+        self._initial_cond = None
+        self._df_duo = None
+        self._df_duo_index_set = None
+
+    @property
+    def duo_pairs(self):
+
+        if self._duo_pairs is None:
+            self._duo_pairs = \
+                self.load_if_not_existing(file_path=FILE_DUO_PAIRS,
+                                          method=get_unique_user_lexeme,
+                                          duo_dict=self.duo_dict)
+        return self._duo_pairs
+
+    def totals(self, ):
+
+        total_correct = []
+        total_seen = []
+        for ind, (u_id, l_id) in enumerate(self.duo_pairs):
+            for item in self.duo_dict[u_id][l_id]:
+                time = self.initial_cond[(l_id, u_id)]
+                correct = self.df_duo_index_set["history_correct"].loc[(l_id, u_id, time)].tolist()[0]
+                seen = self.df_duo_index_set["history_seen"].loc[(l_id, u_id, time)].tolist()[0]
+                total_correct.append(correct)
+                total_seen.append(seen)
+
+
+    # def right_wrong(self):
+    #
+    #     results_duo, duo_pairs, initial_cond, duo_dict, df_duo_index_set, duo_lexeme_difficulty,
+    #     duo_map_lexeme
+    #
+    #     right = results_duo.loc['right'][0]
+    #     wrong = results_duo.loc['wrong'][0]
+    #     temp_duo_map_lexeme = {}
+    #     for ind, (u_id, l_id) in enumerate(duo_pairs):
+    #         if ind % 1000 == 0:
+    #             print(datetime.datetime.now().isoformat(), ind, '/', len(duo_pairs))
+    #         for item in duo_dict[u_id][l_id]:
+    #             time = initial_cond[(l_id, u_id)]
+    #             correct = df_duo_index_set["history_correct"].loc[(l_id, u_id, time)].tolist()[0]
+    #             seen = df_duo_index_set["history_seen"].loc[(l_id, u_id, time)].tolist()[0]
+    #             # print(correct, seen)
+    #             temp = None
+    #             if l_id not in temp_duo_map_lexeme:
+    #                 temp_duo_map_lexeme[l_id] = duo_lexeme_difficulty[duo_map_lexeme[l_id]]
+    #             temp = temp_duo_map_lexeme[l_id]
+    #             item['n_0'] = temp * 2 ** (-(right * correct + wrong * (seen - correct)))
+
+
+
+    @property
+    def training_pairs(self):
+
+        if self._training_pairs is None:
+            self._training_pairs = self.load_if_not_existing(file_path=FILE_TRAINING_PAIRS, method=get_training_pairs,
+                                                             data_dict=self.duo_dict, duo_pairs=self.duo_pairs)
+
+        print(f'{len(self._training_pairs) / len(self.duo_pairs) * 100.:.2f} of sequences can be used for training/testing.')
+        return self._training_pairs
+
+    @property
+    def initial_cond(self):
+
+        if self._initial_cond is None:
+            self._initial_cond = self.load_if_not_existing(file_path=)
+
+    @property
+    def duo_dict(self):
+
+        if self._duo_dict is None:
+            self._duo_dict = self.load_if_not_existing(
+                file_path=FILE_DUO_DICT,
+                method=self.load_duo_dict)
+
+        return self._duo_dict
+
+    @property
+    def df_duo(self):
+
+        if self._df_duo is None:
+            self._df_duo = self.load_if_not_existing(
+                file_name='df_duo.p',
+                method=self.load_df_duo
+            )
+
+        return self._df_duo
+
+    @property
+    def df_duo_index_set(self):
+
+        if self._df_duo_index_set is None:
+            self._df_duo_index_set = self.load_if_not_existing(
+                file_name=""
+            )
+
+    @staticmethod
+    def load_if_not_existing(file_name, method, **kwargs):
+
+        file_path = os.path.join("data", file_name)
+
+        if os.path.exists(file_path):
+            data = load(file_path)
+
+        else:
+            data = method(**kwargs)
+            save(obj=data, file_name=file_path)
+
+        return data
+
+    @staticmethod
+    def load_results_duo():
+
+        print('Loading weights...', end=" ", flush=True)
+        results_duo = pd.read_csv(open(MODEL_WEIGHTS_FILE, 'rb'),
+                                  sep="\t",
+                                  names=['label', 'value'],
+                                  header=None)
+
+        results_duo.set_index("label", inplace=True)
+        print("Done!")
+        return results_duo
+
+    @staticmethod
+    def load_df_duo():
+
+        # Load Data
+        print('Loading raw data...', end=" ", flush=True)
+        df_duo = pd.read_csv(RAW_DATA)
+        print("Done!")
+
+        df_duo['lexeme_comp'] = df_duo['learning_language'] + ":" + df_duo['lexeme_string']
+
+        # df_duo.set_index(["lexeme_id", "user_id", "timestamp"], inplace=True)
+        # df_duo.sort_index(inplace=True)
+
+        return df_duo
+
+    def create_initial_cond(self):
+
+        initial_cond = self.df_duo[["lexeme_id", "user_id", "timestamp"]].groupby(["lexeme_id", "user_id"]).min()[
+            "timestamp"]
+        initial_cond = initial_cond.to_dict()
+        return initial_cond
+
+
+    def create_df_duo_index_set(self):
+        df_duo_index_set = self.df_duo.copy().set_index(
+            ["lexeme_id", "user_id", "timestamp"])
+        df_duo_index_set.sort_index(inplace=True)
+        return df_duo_index_set
 
 def main():
     pass
